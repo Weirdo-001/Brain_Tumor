@@ -14,43 +14,39 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────
-# GLOBAL STYLING (PREMIUM DARK UI)
+# DARK PREMIUM CSS
 # ─────────────────────────────────────────
 st.markdown("""
 <style>
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
 
-html, body, [class*="css"]  {
+html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
-    background: linear-gradient(135deg, #0F172A, #0B1120) !important;
+    background-color: #0B1120 !important;
     color: #E2E8F0;
 }
 
 .stApp {
-    background: transparent !important;
+    background-color: #0B1120 !important;
 }
 
 .block-container {
     padding-top: 2rem !important;
-    padding-bottom: 3rem !important;
     max-width: 1200px;
 }
 
-#MainMenu, footer, header {
-    visibility: hidden;
-}
+#MainMenu, footer, header {visibility: hidden;}
 
 .hero {
     text-align: center;
-    padding: 3rem 1rem 2rem 1rem;
+    padding: 3rem 1rem;
 }
 
 .hero-title {
     font-size: 3rem;
     font-weight: 800;
-    letter-spacing: -1px;
-    background: linear-gradient(90deg, #00F5A0, #00D9F5);
+    background: linear-gradient(90deg,#00F5A0,#00D9F5);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
@@ -58,15 +54,14 @@ html, body, [class*="css"]  {
 .hero-sub {
     color: #94A3B8;
     font-size: 1.05rem;
-    font-weight: 500;
 }
 
 .glass {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(14px);
-    border-radius: 18px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    padding: 1.6rem;
+    background: rgba(255,255,255,0.05);
+    border-radius: 20px;
+    padding: 2rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(12px);
 }
 
 [data-testid="stFileUploader"] {
@@ -74,22 +69,6 @@ html, body, [class*="css"]  {
     border: 2px dashed #00F5A0;
     border-radius: 16px;
     padding: 1.5rem;
-}
-
-.stButton > button {
-    background: linear-gradient(135deg, #00F5A0, #00D9F5);
-    color: #0F172A;
-    border-radius: 12px;
-    font-weight: 700;
-    padding: 0.6rem 1.5rem;
-    border: none;
-}
-
-[data-testid="metric-container"] {
-    background: rgba(255,255,255,0.05);
-    border-radius: 16px;
-    padding: 1rem;
-    border: 1px solid rgba(255,255,255,0.06);
 }
 
 hr {
@@ -103,49 +82,68 @@ hr {
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────
-# MODEL LOADING
+# TUMOR INFO
+# ─────────────────────────────────────────
+TUMOR_INFO = {
+    "glioma": {
+        "color": "#EF4444",
+        "severity": "High Concern",
+        "desc": "Gliomas originate from glial cells in the brain or spine and are among the most common primary brain tumors.",
+        "symptoms": ["Persistent headaches","Seizures","Vision problems","Speech difficulty"],
+        "treatment": ["Surgery","Radiation therapy","Chemotherapy"]
+    },
+    "meningioma": {
+        "color": "#F59E0B",
+        "severity": "Moderate Concern",
+        "desc": "Meningiomas arise from membranes surrounding the brain and are often benign and slow growing.",
+        "symptoms": ["Gradual headaches","Memory issues","Hearing loss"],
+        "treatment": ["Monitoring","Surgery","Radiation"]
+    },
+    "notumor": {
+        "color": "#22C55E",
+        "severity": "All Clear",
+        "desc": "No tumor detected. Brain structure appears normal under model classification.",
+        "symptoms": ["No tumor indicators"],
+        "treatment": ["Routine check-ups"]
+    },
+    "pituitary": {
+        "color": "#3B82F6",
+        "severity": "Requires Attention",
+        "desc": "Pituitary tumors occur in the hormone-regulating gland at the base of the brain.",
+        "symptoms": ["Hormonal imbalance","Vision disturbance","Headaches"],
+        "treatment": ["Medication","Surgery","Hormone therapy"]
+    }
+}
+
+# ─────────────────────────────────────────
+# LOAD MODEL
 # ─────────────────────────────────────────
 @st.cache_resource
 def load_model():
     return tf.keras.models.load_model("tumor_model.keras")
 
 model = load_model()
-CLASS_NAMES = ["glioma", "meningioma", "notumor", "pituitary"]
+CLASS_NAMES = ["glioma","meningioma","notumor","pituitary"]
 
 # ─────────────────────────────────────────
 # HEADER
 # ─────────────────────────────────────────
 st.markdown("""
 <div class="hero">
-    <div style="font-size:3.5rem;">🧠</div>
-    <div class="hero-title">Brain Tumor MRI Classifier</div>
-    <div class="hero-sub">
-        AI-powered diagnosis using EfficientNet • 4 Tumor Classes • Real-time Results
-    </div>
+<div style="font-size:3.5rem;">🧠</div>
+<div class="hero-title">Brain Tumor MRI Classifier</div>
+<div class="hero-sub">
+AI-powered diagnosis using EfficientNet • 4 Tumor Classes • Real-time Results
+</div>
 </div>
 """, unsafe_allow_html=True)
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
 # ─────────────────────────────────────────
-# METRICS
+# UPLOADER
 # ─────────────────────────────────────────
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Overall Accuracy", "89%")
-c2.metric("Glioma", "92%")
-c3.metric("Meningioma", "84%")
-c4.metric("Pituitary", "99%")
-
-st.markdown("<hr>", unsafe_allow_html=True)
-
-# ─────────────────────────────────────────
-# FILE UPLOAD
-# ─────────────────────────────────────────
-uploaded_file = st.file_uploader(
-    "Upload MRI Image",
-    type=["jpg", "png", "jpeg"],
-    label_visibility="collapsed"
-)
+uploaded_file = st.file_uploader("Upload MRI", type=["jpg","png","jpeg"], label_visibility="collapsed")
 
 # ─────────────────────────────────────────
 # PREDICTION
@@ -153,50 +151,51 @@ uploaded_file = st.file_uploader(
 if uploaded_file:
 
     image = Image.open(uploaded_file).convert("RGB")
-    img_resized = image.resize((300, 300))
-    img_array = np.array(img_resized)
-    img_array = preprocess_input(img_array)
-    img_array = np.expand_dims(img_array, axis=0)
+    img = image.resize((300,300))
+    arr = preprocess_input(np.array(img))
+    arr = np.expand_dims(arr, axis=0)
 
     with st.spinner("Analyzing MRI Scan..."):
-        prediction = model.predict(img_array, verbose=0)
+        pred = model.predict(arr, verbose=0)
 
-    probs = prediction[0]
-    top_idx = np.argmax(probs)
-    confidence = probs[top_idx] * 100
-    predicted_class = CLASS_NAMES[top_idx]
+    probs = pred[0]
+    idx = np.argmax(probs)
+    cls = CLASS_NAMES[idx]
+    conf = probs[idx] * 100
+    info = TUMOR_INFO[cls]
 
-    left, right = st.columns([1, 1.5])
+    col1, col2 = st.columns([1,1.5])
 
-    with left:
+    with col1:
         st.image(image, use_column_width=True)
 
-    with right:
+    with col2:
         st.markdown(f"""
         <div class="glass">
-            <h2 style="margin-top:0;">Prediction: {predicted_class.upper()}</h2>
-            <p style="font-size:1.2rem;">Confidence: <b>{confidence:.2f}%</b></p>
-            <div style="background:#1E293B; border-radius:10px; height:10px;">
-                <div style="
-                    background: linear-gradient(90deg,#00F5A0,#00D9F5);
-                    width:{confidence}%;
-                    height:100%;
-                    border-radius:10px;">
-                </div>
-            </div>
+            <h2 style="color:{info['color']};margin-top:0;">Prediction: {cls.upper()}</h2>
+            <p><b>Confidence:</b> {conf:.2f}%</p>
+            <p><b>Severity:</b> {info['severity']}</p>
+            <p style="margin-top:1rem;">{info['desc']}</p>
         </div>
         """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    st.markdown("### Class Probabilities")
-    for i, cls in enumerate(CLASS_NAMES):
-        st.progress(float(probs[i]))
-        st.write(f"{cls.capitalize()}: {probs[i]*100:.2f}%")
+    s1, s2 = st.columns(2)
+
+    with s1:
+        st.markdown("### Symptoms")
+        for s in info["symptoms"]:
+            st.write("•", s)
+
+    with s2:
+        st.markdown("### Treatment Options")
+        for t in info["treatment"]:
+            st.write("•", t)
 
 else:
     st.markdown("""
-    <div style="text-align:center; padding:3rem; color:#64748B;">
-        Upload an MRI image above to receive AI-powered classification.
+    <div style="text-align:center; padding:4rem; color:#64748B;">
+    Upload an MRI image above to receive AI-powered classification.
     </div>
     """, unsafe_allow_html=True)
