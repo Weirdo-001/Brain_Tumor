@@ -6,6 +6,8 @@ import time
 from PIL import Image
 import io
 import base64
+import tensorflow as tf
+from tensorflow.keras.applications.efficientnet import preprocess_input
 
 # =============================================================================
 # Page Config
@@ -276,27 +278,35 @@ def inject_styles():
 # =============================================================================
 # Prediction logic (simulated)
 # =============================================================================
-def simulate_prediction():
-    dominant_idx = random.randint(0, 3)
-    dominant_class = CLASS_NAMES[dominant_idx]
+@st.cache_resource
+def load_model():
+    return tf.keras.models.load_model("tumor_model.keras")
 
-    raw = []
-    for i in range(4):
-        if i == dominant_idx:
-            raw.append(70 + random.random() * 25)
-        else:
-            raw.append(random.random() * 10)
+model = load_model()
 
-    total = sum(raw)
-    probs = {CLASS_NAMES[i]: round((raw[i] / total) * 100, 2) for i in range(4)}
+def real_prediction(image_bytes):
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    image = image.resize((300, 300))
 
-    return {
-        "class_name": dominant_class,
-        "confidence": probs[dominant_class],
-        "probabilities": probs,
+    img_array = np.array(image)
+    img_array = preprocess_input(img_array)
+    img_array = np.expand_dims(img_array, axis=0)
+
+    preds = model.predict(img_array, verbose=0)[0]
+
+    probs = {
+        CLASS_NAMES[i]: round(float(preds[i] * 100), 2)
+        for i in range(len(CLASS_NAMES))
     }
 
+    top_class = CLASS_NAMES[np.argmax(preds)]
+    confidence = probs[top_class]
 
+    return {
+        "class_name": top_class,
+        "confidence": confidence,
+        "probabilities": probs,
+    }
 # =============================================================================
 # Chart helpers
 # =============================================================================
@@ -455,11 +465,11 @@ def render_sidebar():
 
         st.markdown(f"#### Model Specifications")
         specs = {
-            "Architecture": "EfficientNet-B0",
-            "Input Size": "224 x 224 px",
+            "Architecture": "EfficientNet-B3",
+            "Input Size": "300 x 300 px",
             "Parameters": "~5.3M",
-            "Training Acc.": "98.2%",
-            "Framework": "PyTorch",
+            "Training Acc.": "87.5%",
+            "Framework": "Tensorflow",
         }
         for k, v in specs.items():
             st.markdown(f"""
@@ -857,7 +867,7 @@ def main():
                 """, unsafe_allow_html=True)
                 time.sleep(1.5)
 
-            st.session_state["prediction"] = simulate_prediction()
+            st.session_state["prediction"] = real_prediction(image_bytes)
             st.session_state["last_file"] = uploaded_file.name
             st.rerun()
 
