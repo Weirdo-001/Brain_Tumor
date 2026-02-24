@@ -429,7 +429,7 @@ def render_sidebar():
         <div style="text-align: center; margin-bottom: 16px;">
             <div style="font-size: 32px; margin-bottom: 8px;">🧠</div>
             <h2 style="margin: 0; font-size: 18px; color: {TEXT_PRIMARY} !important;">MRI Classifier</h2>
-            <p style="font-size: 12px; color: {TEXT_MUTED}; margin-top: 4px;">v2.0 &bull; EfficientNet-B0</p>
+            <p style="font-size: 12px; color: {TEXT_MUTED}; margin-top: 4px;">v2.0 &bull; EfficientNet-B3</p>
         </div>
         <hr style="border-color: {BORDER}; margin: 16px 0;">
         """, unsafe_allow_html=True)
