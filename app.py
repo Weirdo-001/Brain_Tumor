@@ -1,818 +1,881 @@
 import streamlit as st
-import numpy as np
-import tensorflow as tf
-from PIL import Image
-from tensorflow.keras.applications.efficientnet import preprocess_input
 import plotly.graph_objects as go
+import plotly.express as px
+import random
+import time
+from PIL import Image
+import io
+import base64
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PAGE CONFIG
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
+# Page Config
+# =============================================================================
 st.set_page_config(
-    page_title="NeuroScan AI · Brain Tumor Classifier",
+    page_title="Brain Tumor MRI Classifier",
     page_icon="🧠",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CSS
-# ─────────────────────────────────────────────────────────────────────────────
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+# =============================================================================
+# Color Palette & Constants
+# =============================================================================
+BG_PRIMARY = "#060a14"
+BG_CARD = "#0c1220"
+BG_SECONDARY = "#131c2e"
+BORDER = "#1e2b43"
+ACCENT = "#2dd4bf"
+TEXT_PRIMARY = "#e8ecf4"
+TEXT_SECONDARY = "#c5cdd9"
+TEXT_MUTED = "#7a8599"
 
-/* ── Reset & Base ── */
-*, *::before, *::after { box-sizing: border-box; }
-
-html, body, [class*="css"], .stApp {
-    font-family: 'DM Sans', sans-serif;
-    background-color: #050C15 !important;
-    color: #C8D8E8 !important;
-}
-
-#MainMenu, footer, header { visibility: hidden; }
-
-.block-container {
-    padding: 0 !important;
-    max-width: 100% !important;
-}
-
-/* ── Scrollbar ── */
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-track { background: #050C15; }
-::-webkit-scrollbar-thumb { background: #1CFFD4; border-radius: 99px; }
-
-/* ── File uploader — fix invisible text ── */
-[data-testid="stFileUploader"] {
-    background: #0A1628 !important;
-    border: 2px dashed #1CFFD4 !important;
-    border-radius: 18px !important;
-    padding: 2.5rem 2rem !important;
-    transition: all 0.3s ease;
-}
-[data-testid="stFileUploader"]:hover {
-    border-color: #00FFE0 !important;
-    background: #0D1E38 !important;
-    box-shadow: 0 0 40px rgba(28,255,212,0.08);
-}
-[data-testid="stFileUploader"] section {
-    background: transparent !important;
-    border: none !important;
-    padding: 0 !important;
-}
-[data-testid="stFileUploader"] label,
-[data-testid="stFileUploader"] p,
-[data-testid="stFileUploader"] span,
-[data-testid="stFileUploader"] small,
-[data-testid="stFileUploader"] div {
-    color: #A0C0D8 !important;
-    font-family: 'DM Sans', sans-serif !important;
-}
-[data-testid="stFileUploader"] button {
-    background: #1CFFD4 !important;
-    color: #050C15 !important;
-    border: none !important;
-    border-radius: 10px !important;
-    font-weight: 700 !important;
-    padding: 0.5rem 1.5rem !important;
-    font-family: 'DM Sans', sans-serif !important;
-}
-[data-testid="stFileUploader"] button:hover {
-    background: #00FFE0 !important;
-}
-
-/* ── Metric cards ── */
-[data-testid="metric-container"] {
-    background: #0A1628 !important;
-    border: 1px solid #112240 !important;
-    border-radius: 16px !important;
-    padding: 1.2rem 1.4rem !important;
-}
-[data-testid="stMetricLabel"] p,
-[data-testid="stMetricLabel"] span {
-    color: #6A8FAF !important;
-    font-size: 0.78rem !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.08em !important;
-    text-transform: uppercase !important;
-}
-[data-testid="stMetricValue"] {
-    color: #FFFFFF !important;
-    font-size: 1.6rem !important;
-    font-weight: 700 !important;
-}
-
-/* ── Spinner ── */
-.stSpinner > div { border-top-color: #1CFFD4 !important; }
-
-/* ── Plotly bg fix ── */
-.js-plotly-plot .plotly { background: transparent !important; }
-</style>
-""", unsafe_allow_html=True)
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TUMOR DATA
-# ─────────────────────────────────────────────────────────────────────────────
 TUMOR_INFO = {
     "glioma": {
-        "label":       "Glioma",
-        "color":       "#FF4D6D",
-        "glow":        "rgba(255,77,109,0.25)",
-        "bg":          "linear-gradient(135deg, #1A0510 0%, #0D0818 100%)",
-        "border":      "#FF4D6D",
-        "icon":        "⬤",
-        "severity":    "HIGH CONCERN",
-        "sev_color":   "#FF4D6D",
-        "sev_bg":      "rgba(255,77,109,0.12)",
-        "model_acc":   92,
-        "description": (
-            "Gliomas originate in the glial (supportive) cells of the brain or spinal cord. "
-            "They represent ~33% of all primary brain tumors and range from slow-growing "
-            "low-grade forms to highly aggressive glioblastomas (GBM)."
-        ),
-        "symptoms":    [
-            "Persistent, worsening headaches",
-            "Seizures or convulsions",
-            "Cognitive & memory decline",
-            "Vision or speech impairment",
-            "Nausea and vomiting",
-            "Progressive weakness in limbs",
-        ],
-        "treatment":   [
-            "Surgical resection (craniotomy)",
-            "Radiation therapy",
-            "Temozolomide chemotherapy",
-            "Bevacizumab (targeted therapy)",
-            "Clinical trial enrollment",
-        ],
-        "note":        "⚠️ Seek immediate consultation with a neuro-oncologist.",
-        "prognosis":   "Variable — depends heavily on grade and molecular markers (IDH, MGMT).",
+        "label": "Glioma",
+        "color": "#ef4444",
+        "severity": "High Concern",
+        "severity_level": "high",
+        "description": "Gliomas originate from glial cells in the brain or spine and are among the most common primary brain tumors. They can be aggressive and may require immediate treatment.",
+        "symptoms": ["Persistent headaches", "Seizures", "Vision problems", "Speech difficulty", "Cognitive changes"],
+        "treatment": ["Surgical resection", "Radiation therapy", "Chemotherapy (Temozolomide)", "Targeted therapy"],
+        "prevalence": "~33% of all brain tumors",
+        "survival_rate": "5-year survival varies by grade",
     },
     "meningioma": {
-        "label":       "Meningioma",
-        "color":       "#FFB347",
-        "glow":        "rgba(255,179,71,0.22)",
-        "bg":          "linear-gradient(135deg, #1A1005 0%, #100D05 100%)",
-        "border":      "#FFB347",
-        "icon":        "⬤",
-        "severity":    "MODERATE CONCERN",
-        "sev_color":   "#FFB347",
-        "sev_bg":      "rgba(255,179,71,0.12)",
-        "model_acc":   84,
-        "description": (
-            "Meningiomas arise from the meninges — the layered membranes enveloping the brain and spinal cord. "
-            "~90% are benign (Grade I) and slow-growing, though location can cause significant neurological effects."
-        ),
-        "symptoms":    [
-            "Gradual-onset headaches",
-            "Hearing or vision loss",
-            "Memory difficulties",
-            "Unilateral limb weakness",
-            "Personality or mood changes",
-            "Seizures (in some cases)",
-        ],
-        "treatment":   [
-            "Active surveillance (watch & wait)",
-            "Stereotactic radiosurgery (Gamma Knife)",
-            "Surgical excision",
-            "Fractionated radiotherapy",
-        ],
-        "note":        "ℹ️ Most meningiomas are benign — a neurologist can advise on the best plan.",
-        "prognosis":   "Generally favourable; Grade I rarely recurs after complete resection.",
+        "label": "Meningioma",
+        "color": "#f59e0b",
+        "severity": "Moderate Concern",
+        "severity_level": "moderate",
+        "description": "Meningiomas arise from the meninges, the membranes surrounding the brain and spinal cord. They are often benign and slow-growing, but may require monitoring or treatment.",
+        "symptoms": ["Gradual headaches", "Memory issues", "Hearing loss", "Visual disturbances", "Weakness in limbs"],
+        "treatment": ["Active monitoring", "Surgical removal", "Stereotactic radiosurgery", "Radiation therapy"],
+        "prevalence": "~30% of all brain tumors",
+        "survival_rate": "~80% five-year survival",
     },
     "notumor": {
-        "label":       "No Tumor Detected",
-        "color":       "#00E5A0",
-        "glow":        "rgba(0,229,160,0.20)",
-        "bg":          "linear-gradient(135deg, #051A10 0%, #050D0A 100%)",
-        "border":      "#00E5A0",
-        "icon":        "⬤",
-        "severity":    "ALL CLEAR",
-        "sev_color":   "#00E5A0",
-        "sev_bg":      "rgba(0,229,160,0.10)",
-        "model_acc":   95,
-        "description": (
-            "No tumor was detected in this MRI scan. Brain tissue appears within normal classification parameters. "
-            "If symptoms persist, consider follow-up imaging and clinical evaluation."
-        ),
-        "symptoms":    [
-            "No tumor indicators detected",
-            "Continue symptom monitoring",
-            "Discuss findings with physician",
-        ],
-        "treatment":   [
-            "No immediate intervention needed",
-            "Routine annual MRI if high-risk",
-            "Follow up with neurologist if symptomatic",
-        ],
-        "note":        "✅ Great result! Always confirm with a qualified clinician.",
-        "prognosis":   "Excellent — no mass identified on this scan.",
+        "label": "No Tumor",
+        "color": "#22c55e",
+        "severity": "All Clear",
+        "severity_level": "clear",
+        "description": "No tumor detected in the MRI scan. The brain structure appears normal based on the AI classification model. Regular check-ups are still recommended.",
+        "symptoms": ["No concerning indicators detected"],
+        "treatment": ["Routine neurological check-ups", "Healthy lifestyle maintenance"],
+        "prevalence": "N/A",
+        "survival_rate": "N/A",
     },
     "pituitary": {
-        "label":       "Pituitary Tumor",
-        "color":       "#5BA8FF",
-        "glow":        "rgba(91,168,255,0.22)",
-        "bg":          "linear-gradient(135deg, #050A1A 0%, #050C18 100%)",
-        "border":      "#5BA8FF",
-        "icon":        "⬤",
-        "severity":    "REQUIRES ATTENTION",
-        "sev_color":   "#5BA8FF",
-        "sev_bg":      "rgba(91,168,255,0.12)",
-        "model_acc":   99,
-        "description": (
-            "Pituitary tumors (adenomas) develop in the pituitary gland at the brain's base. "
-            "Most are benign but can disrupt the hypothalamic–pituitary axis, causing wide-ranging hormonal effects."
-        ),
-        "symptoms":    [
-            "Headaches behind/above eyes",
-            "Bitemporal visual field loss",
-            "Hormonal imbalances (cortisol, GH, TSH)",
-            "Unexplained weight gain/loss",
-            "Fatigue and mood disturbances",
-            "Reproductive irregularities",
-        ],
-        "treatment":   [
-            "Dopamine agonists (prolactinoma)",
-            "Transsphenoidal surgery (TSSA)",
-            "Stereotactic radiosurgery",
-            "Hormone replacement therapy",
-            "Somatostatin analogues (acromegaly)",
-        ],
-        "note":        "ℹ️ Mostly benign — endocrinology + neurosurgery co-management recommended.",
-        "prognosis":   "Good for most adenomas; depends on size, type, and hormonal involvement.",
+        "label": "Pituitary",
+        "color": "#38bdf8",
+        "severity": "Requires Attention",
+        "severity_level": "moderate",
+        "description": "Pituitary tumors occur in the pituitary gland at the base of the brain. They often affect hormone production and are usually treatable with good outcomes.",
+        "symptoms": ["Hormonal imbalance", "Vision disturbance", "Chronic headaches", "Fatigue", "Unexplained weight changes"],
+        "treatment": ["Hormone therapy", "Transsphenoidal surgery", "Medication (Cabergoline)", "Radiation therapy"],
+        "prevalence": "~17% of all brain tumors",
+        "survival_rate": "~95% five-year survival",
     },
 }
 
-CLASS_NAMES  = ["glioma", "meningioma", "notumor", "pituitary"]
-MODEL_STATS  = {"Overall": 89, "Glioma": 92, "Meningioma": 84, "No Tumor": 95, "Pituitary": 99}
-BAR_COLORS   = {"glioma": "#FF4D6D", "meningioma": "#FFB347", "notumor": "#00E5A0", "pituitary": "#5BA8FF"}
-BAR_LABELS   = {"glioma": "Glioma", "meningioma": "Meningioma", "notumor": "No Tumor", "pituitary": "Pituitary"}
+CLASS_NAMES = ["glioma", "meningioma", "notumor", "pituitary"]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# MODEL
-# ─────────────────────────────────────────────────────────────────────────────
-@st.cache_resource
-def load_model():
-    return tf.keras.models.load_model("tumor_model.keras")
 
-model = load_model()
+# =============================================================================
+# Styles
+# =============================================================================
+def inject_styles():
+    st.markdown(f"""
+    <style>
+        /* ---- Global ---- */
+        .stApp {{
+            background-color: {BG_PRIMARY};
+        }}
+        section[data-testid="stSidebar"] {{
+            background-color: {BG_CARD};
+            border-right: 1px solid {BORDER};
+        }}
+        section[data-testid="stSidebar"] * {{
+            color: {TEXT_SECONDARY} !important;
+        }}
+        section[data-testid="stSidebar"] h1,
+        section[data-testid="stSidebar"] h2,
+        section[data-testid="stSidebar"] h3 {{
+            color: {TEXT_PRIMARY} !important;
+        }}
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HERO HEADER
-# ─────────────────────────────────────────────────────────────────────────────
-st.markdown("""
-<div style="
-    background: linear-gradient(180deg, #0A1628 0%, #050C15 100%);
-    border-bottom: 1px solid #0D2240;
-    padding: 3.5rem 4rem 3rem 4rem;
-    position: relative;
-    overflow: hidden;
-">
-    <!-- Subtle grid pattern -->
-    <div style="
-        position: absolute; inset: 0;
-        background-image: linear-gradient(rgba(28,255,212,0.03) 1px, transparent 1px),
-                          linear-gradient(90deg, rgba(28,255,212,0.03) 1px, transparent 1px);
-        background-size: 40px 40px;
-        pointer-events: none;
-    "></div>
+        /* ---- Hide default header/footer ---- */
+        header[data-testid="stHeader"] {{
+            background: transparent;
+        }}
+        footer {{
+            visibility: hidden;
+        }}
 
-    <!-- Glowing orb -->
-    <div style="
-        position: absolute; top: -60px; right: 120px;
-        width: 300px; height: 300px;
-        background: radial-gradient(circle, rgba(28,255,212,0.07) 0%, transparent 70%);
-        pointer-events: none;
-    "></div>
+        /* ---- Typography ---- */
+        h1, h2, h3, h4, h5, h6,
+        .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {{
+            color: {TEXT_PRIMARY} !important;
+        }}
+        p, li, span, div, label {{
+            color: {TEXT_SECONDARY};
+        }}
 
-    <div style="position: relative; max-width: 1100px; margin: 0 auto;">
-        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-            <span style="font-size: 0.72rem; font-weight: 700; letter-spacing: 0.18em;
-                         color: #1CFFD4; text-transform: uppercase; font-family: 'Space Mono', monospace;">
-                ◈ NeuroScan AI
-            </span>
-            <span style="width: 40px; height: 1px; background: #1CFFD4; display: inline-block;"></span>
-            <span style="font-size: 0.72rem; color: #3A5A7A; font-family: 'Space Mono', monospace;">v2.0 · EfficientNet</span>
-        </div>
+        /* ---- File uploader fixes ---- */
+        [data-testid="stFileUploader"] {{
+            background-color: transparent !important;
+        }}
+        [data-testid="stFileUploader"] section {{
+            background-color: {BG_SECONDARY} !important;
+            border: 2px dashed {BORDER} !important;
+            border-radius: 16px !important;
+            padding: 40px 20px !important;
+            transition: border-color 0.2s ease;
+        }}
+        [data-testid="stFileUploader"] section:hover {{
+            border-color: {ACCENT} !important;
+        }}
+        [data-testid="stFileUploader"] section * {{
+            color: {TEXT_SECONDARY} !important;
+        }}
+        [data-testid="stFileUploader"] small {{
+            color: {TEXT_MUTED} !important;
+        }}
+        [data-testid="stFileUploader"] button {{
+            background-color: {ACCENT} !important;
+            color: {BG_PRIMARY} !important;
+            border: none !important;
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+        }}
+        [data-testid="stFileUploaderDropzoneInstructions] span {{
+            color: {TEXT_SECONDARY} !important;
+        }}
 
-        <h1 style="
-            font-family: 'DM Sans', sans-serif;
-            font-size: clamp(2.2rem, 5vw, 3.6rem);
-            font-weight: 700;
-            color: #FFFFFF;
-            margin: 0 0 0.6rem 0;
-            line-height: 1.1;
-            letter-spacing: -0.02em;
-        ">
-            Brain Tumor<br>
-            <span style="
-                background: linear-gradient(90deg, #1CFFD4, #5BA8FF);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-            ">MRI Classifier</span>
-        </h1>
+        /* Uploaded file name */
+        [data-testid="stFileUploaderFile"] {{
+            background-color: {BG_SECONDARY} !important;
+            border: 1px solid {BORDER} !important;
+            border-radius: 8px !important;
+        }}
+        [data-testid="stFileUploaderFile"] * {{
+            color: {TEXT_SECONDARY} !important;
+        }}
 
-        <p style="
-            color: #6A8FAF !important;
-            font-size: 1.05rem;
-            margin: 0;
-            max-width: 520px;
-            line-height: 1.6;
-        ">
-            Upload a brain MRI scan for instant AI-powered classification across
-            four tumor categories with clinical context and confidence analysis.
-        </p>
+        /* ---- Tabs ---- */
+        .stTabs [data-baseweb="tab-list"] {{
+            gap: 4px;
+            background-color: {BG_SECONDARY};
+            border-radius: 10px;
+            padding: 4px;
+        }}
+        .stTabs [data-baseweb="tab"] {{
+            background-color: transparent;
+            border: none;
+            border-radius: 8px;
+            color: {TEXT_MUTED} !important;
+            padding: 8px 16px;
+            font-size: 14px;
+        }}
+        .stTabs [aria-selected="true"] {{
+            background-color: {BG_CARD} !important;
+            color: {ACCENT} !important;
+            border: 1px solid {BORDER} !important;
+        }}
+        .stTabs [data-baseweb="tab-panel"] {{
+            padding-top: 16px;
+        }}
 
-        <!-- Stat pills -->
-        <div style="display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap;">
-            <span style="background: rgba(28,255,212,0.08); border: 1px solid rgba(28,255,212,0.2);
-                         color: #1CFFD4 !important; border-radius: 99px; padding: 0.4rem 1rem;
-                         font-size: 0.8rem; font-weight: 600;">89% Overall Accuracy</span>
-            <span style="background: rgba(91,168,255,0.08); border: 1px solid rgba(91,168,255,0.2);
-                         color: #5BA8FF !important; border-radius: 99px; padding: 0.4rem 1rem;
-                         font-size: 0.8rem; font-weight: 600;">4 Tumor Classes</span>
-            <span style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-                         color: #A0C0D8 !important; border-radius: 99px; padding: 0.4rem 1rem;
-                         font-size: 0.8rem; font-weight: 600;">Real-time Inference</span>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+        /* ---- Metric cards ---- */
+        [data-testid="stMetric"] {{
+            background-color: {BG_SECONDARY};
+            border: 1px solid {BORDER};
+            border-radius: 12px;
+            padding: 16px;
+        }}
+        [data-testid="stMetricLabel"] {{
+            color: {TEXT_MUTED} !important;
+        }}
+        [data-testid="stMetricValue"] {{
+            color: {TEXT_PRIMARY} !important;
+        }}
 
-# ─────────────────────────────────────────────────────────────────────────────
-# MAIN CONTENT WRAPPER
-# ─────────────────────────────────────────────────────────────────────────────
-st.markdown('<div style="max-width: 1200px; margin: 0 auto; padding: 2.5rem 3rem;">', unsafe_allow_html=True)
+        /* ---- Expander ---- */
+        .streamlit-expanderHeader {{
+            background-color: {BG_SECONDARY} !important;
+            border: 1px solid {BORDER} !important;
+            border-radius: 12px !important;
+            color: {TEXT_PRIMARY} !important;
+        }}
+        .streamlit-expanderContent {{
+            background-color: {BG_CARD} !important;
+            border: 1px solid {BORDER} !important;
+        }}
 
-# ─────────────────────────────────────────────────────────────────────────────
-# MODEL PERFORMANCE STATS
-# ─────────────────────────────────────────────────────────────────────────────
-st.markdown("""
-<p style="font-size: 0.72rem; font-weight: 700; letter-spacing: 0.18em;
-           color: #3A5A7A !important; text-transform: uppercase;
-           font-family: 'Space Mono', monospace; margin-bottom: 1rem;">
-    ◈ Model Performance Metrics
-</p>
-""", unsafe_allow_html=True)
+        /* ---- Progress bars ---- */
+        .stProgress > div > div > div > div {{
+            border-radius: 8px;
+        }}
 
-mc = st.columns(5)
-metric_data = [
-    ("Overall", "89%", "#1CFFD4"),
-    ("Glioma", "92%", "#FF4D6D"),
-    ("Meningioma", "84%", "#FFB347"),
-    ("No Tumor", "95%", "#00E5A0"),
-    ("Pituitary", "99%", "#5BA8FF"),
-]
-for col, (label, val, color) in zip(mc, metric_data):
-    with col:
-        st.markdown(f"""
-        <div style="
-            background: #0A1628;
-            border: 1px solid #112240;
-            border-top: 3px solid {color};
+        /* ---- Custom card class ---- */
+        .card {{
+            background-color: {BG_CARD};
+            border: 1px solid {BORDER};
+            border-radius: 16px;
+            padding: 24px;
+        }}
+        .card-inner {{
+            background-color: {BG_SECONDARY};
+            border: 1px solid {BORDER};
+            border-radius: 12px;
+            padding: 16px;
+        }}
+        .badge {{
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+        }}
+        .feature-card {{
+            background-color: {BG_CARD};
+            border: 1px solid {BORDER};
             border-radius: 14px;
-            padding: 1.2rem 1.3rem;
+            padding: 20px;
             text-align: center;
-        ">
-            <div style="font-size: 0.7rem; font-weight: 600; letter-spacing: 0.12em;
-                        text-transform: uppercase; color: #4A6A8A !important; margin-bottom: 0.4rem;">
-                {label}
-            </div>
-            <div style="font-size: 2rem; font-weight: 800; color: {color} !important;
-                        font-family: 'Space Mono', monospace;">
-                {val}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+            transition: border-color 0.2s ease;
+        }}
+        .feature-card:hover {{
+            border-color: {ACCENT}44;
+        }}
+        .step-num {{
+            font-family: monospace;
+            font-size: 11px;
+            color: {ACCENT}88;
+            font-weight: 700;
+        }}
+        .symptom-item {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background-color: {BG_SECONDARY};
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+        }}
+        .dot {{
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }}
+    </style>
+    """, unsafe_allow_html=True)
 
-st.markdown("<br>", unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# MODEL ACCURACY BAR CHART
-# ─────────────────────────────────────────────────────────────────────────────
-fig_model = go.Figure()
+# =============================================================================
+# Prediction logic (simulated)
+# =============================================================================
+def simulate_prediction():
+    dominant_idx = random.randint(0, 3)
+    dominant_class = CLASS_NAMES[dominant_idx]
 
-labels_chart = ["Overall", "Glioma", "Meningioma", "No Tumor", "Pituitary"]
-values_chart = [89, 92, 84, 95, 99]
-colors_chart = ["#1CFFD4", "#FF4D6D", "#FFB347", "#00E5A0", "#5BA8FF"]
+    raw = []
+    for i in range(4):
+        if i == dominant_idx:
+            raw.append(70 + random.random() * 25)
+        else:
+            raw.append(random.random() * 10)
 
-fig_model.add_trace(go.Bar(
-    x=labels_chart,
-    y=values_chart,
-    marker=dict(
-        color=colors_chart,
-        cornerradius=8,
-        line=dict(width=0),
-    ),
-    text=[f"{v}%" for v in values_chart],
-    textposition="outside",
-    textfont=dict(color="#C8D8E8", size=13, family="Space Mono"),
-    hovertemplate="<b>%{x}</b><br>Accuracy: %{y}%<extra></extra>",
-))
+    total = sum(raw)
+    probs = {CLASS_NAMES[i]: round((raw[i] / total) * 100, 2) for i in range(4)}
 
-fig_model.update_layout(
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(10,22,40,0.6)",
-    height=280,
-    margin=dict(l=10, r=10, t=20, b=10),
-    xaxis=dict(
-        tickfont=dict(color="#6A8FAF", size=12, family="DM Sans"),
-        gridcolor="rgba(255,255,255,0)",
-        showline=False,
-        zeroline=False,
-    ),
-    yaxis=dict(
-        range=[0, 112],
-        tickfont=dict(color="#6A8FAF", size=11),
-        gridcolor="rgba(255,255,255,0.04)",
-        showline=False,
-        zeroline=False,
-        ticksuffix="%",
-    ),
-    showlegend=False,
-    bargap=0.35,
-)
+    return {
+        "class_name": dominant_class,
+        "confidence": probs[dominant_class],
+        "probabilities": probs,
+    }
 
-st.markdown("""
-<div style="background: #0A1628; border: 1px solid #112240; border-radius: 18px; padding: 1.5rem 1.5rem 0.5rem;">
-    <p style="font-size: 0.72rem; font-weight: 700; letter-spacing: 0.15em; color: #3A5A7A !important;
-              text-transform: uppercase; font-family: 'Space Mono', monospace; margin: 0 0 0.2rem 0;">
-        Per-Class Accuracy Breakdown
-    </p>
-""", unsafe_allow_html=True)
-st.plotly_chart(fig_model, use_container_width=True, config={"displayModeBar": False})
-st.markdown("</div>", unsafe_allow_html=True)
 
-st.markdown("<br><br>", unsafe_allow_html=True)
+# =============================================================================
+# Chart helpers
+# =============================================================================
+def create_bar_chart(probs):
+    sorted_items = sorted(probs.items(), key=lambda x: x[1], reverse=True)
+    labels = [TUMOR_INFO[k]["label"] for k, _ in sorted_items]
+    values = [v for _, v in sorted_items]
+    colors = [TUMOR_INFO[k]["color"] for k, _ in sorted_items]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# UPLOAD SECTION
-# ─────────────────────────────────────────────────────────────────────────────
-st.markdown("""
-<p style="font-size: 0.72rem; font-weight: 700; letter-spacing: 0.18em;
-           color: #3A5A7A !important; text-transform: uppercase;
-           font-family: 'Space Mono', monospace; margin-bottom: 1rem;">
-    ◈ Upload MRI Scan
-</p>
-""", unsafe_allow_html=True)
-
-uploaded_file = st.file_uploader(
-    "upload",
-    type=["jpg", "png", "jpeg"],
-    label_visibility="collapsed",
-)
-
-# ─────────────────────────────────────────────────────────────────────────────
-# RESULTS
-# ─────────────────────────────────────────────────────────────────────────────
-if uploaded_file:
-    image = Image.open(uploaded_file).convert("RGB")
-
-    img_r = image.resize((300, 300))
-    arr   = preprocess_input(np.array(img_r).astype(np.float32))
-    arr   = np.expand_dims(arr, axis=0)
-
-    with st.spinner("Running inference…"):
-        pred = model.predict(arr, verbose=0)
-
-    probs       = pred[0]
-    top_idx     = int(np.argmax(probs))
-    cls         = CLASS_NAMES[top_idx]
-    conf        = float(probs[top_idx]) * 100
-    info        = TUMOR_INFO[cls]
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── Image + Result hero ───────────────────────────────────────────────────
-    img_col, res_col = st.columns([1, 1.7], gap="large")
-
-    with img_col:
-        st.markdown("""
-        <p style="font-size: 0.7rem; font-weight: 700; letter-spacing: 0.15em;
-                  color: #3A5A7A !important; text-transform: uppercase;
-                  font-family: 'Space Mono', monospace; margin-bottom: 0.6rem;">
-            ◈ Uploaded Scan
-        </p>
-        """, unsafe_allow_html=True)
-        st.image(image, use_column_width=True)
-
-    with res_col:
-        # ── Hero prediction card ──────────────────────────────────────────────
-        st.markdown(f"""
-        <div style="
-            background: {info['bg']};
-            border: 1.5px solid {info['border']}55;
-            border-radius: 22px;
-            padding: 2rem 2.2rem;
-            box-shadow: 0 0 60px {info['glow']};
-            margin-bottom: 1rem;
-        ">
-            <!-- Top row -->
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.4rem;">
-                <div>
-                    <div style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.2em;
-                                color: #3A5A7A !important; text-transform: uppercase;
-                                font-family: 'Space Mono', monospace; margin-bottom: 0.4rem;">
-                        Classification Result
-                    </div>
-                    <div style="font-size: 2.2rem; font-weight: 800; color: {info['color']} !important;
-                                line-height: 1; letter-spacing: -0.02em; font-family: 'DM Sans', sans-serif;">
-                        {info['label']}
-                    </div>
-                </div>
-                <span style="
-                    background: {info['sev_bg']};
-                    color: {info['sev_color']} !important;
-                    border: 1px solid {info['sev_color']}44;
-                    border-radius: 99px;
-                    padding: 0.35rem 1.1rem;
-                    font-size: 0.7rem;
-                    font-weight: 700;
-                    letter-spacing: 0.1em;
-                    font-family: 'Space Mono', monospace;
-                    white-space: nowrap;
-                ">{info['severity']}</span>
-            </div>
-
-            <!-- Confidence bar -->
-            <div style="margin-bottom: 1.4rem;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                    <span style="font-size: 0.8rem; font-weight: 600; color: #6A8FAF !important;">Confidence Score</span>
-                    <span style="font-size: 1.05rem; font-weight: 800; color: {info['color']} !important;
-                                 font-family: 'Space Mono', monospace;">{conf:.2f}%</span>
-                </div>
-                <div style="background: rgba(255,255,255,0.06); border-radius: 99px; height: 8px; overflow: hidden;">
-                    <div style="
-                        background: linear-gradient(90deg, {info['color']}77, {info['color']});
-                        width: {conf:.1f}%;
-                        height: 100%;
-                        border-radius: 99px;
-                        box-shadow: 0 0 12px {info['color']}66;
-                    "></div>
-                </div>
-            </div>
-
-            <!-- Description -->
-            <p style="color: #8AAAC0 !important; font-size: 0.9rem; line-height: 1.7; margin-bottom: 1.2rem;">
-                {info['description']}
-            </p>
-
-            <!-- Prognosis -->
-            <div style="
-                background: rgba(255,255,255,0.04);
-                border-radius: 10px;
-                padding: 0.7rem 1rem;
-                margin-bottom: 1rem;
-                display: flex;
-                gap: 0.6rem;
-                align-items: flex-start;
-            ">
-                <span style="color: {info['color']} !important; font-weight: 700; font-size: 0.8rem; white-space: nowrap;">Prognosis</span>
-                <span style="color: #7A9AB8 !important; font-size: 0.82rem; line-height: 1.5;">{info['prognosis']}</span>
-            </div>
-
-            <!-- Clinical note -->
-            <div style="
-                border-left: 3px solid {info['color']};
-                padding: 0.6rem 1rem;
-                border-radius: 0 8px 8px 0;
-                background: {info['sev_bg']};
-                color: #A0C0D8 !important;
-                font-size: 0.83rem;
-                line-height: 1.5;
-            ">
-                {info['note']}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── All class probabilities — Plotly horizontal bar ──────────────────────
-    sorted_idx  = np.argsort(probs)
-    cls_sorted  = [CLASS_NAMES[i] for i in sorted_idx]
-    pct_sorted  = [float(probs[i]) * 100 for i in sorted_idx]
-    col_sorted  = [BAR_COLORS[c] for c in cls_sorted]
-    lbl_sorted  = [BAR_LABELS[c] for c in cls_sorted]
-
-    fig_prob = go.Figure()
-    fig_prob.add_trace(go.Bar(
-        y=lbl_sorted,
-        x=pct_sorted,
+    fig = go.Figure(go.Bar(
+        x=values,
+        y=labels,
         orientation="h",
-        marker=dict(
-            color=[BAR_COLORS[c] if c == cls else BAR_COLORS[c] + "55" for c in cls_sorted],
-            cornerradius=6,
-            line=dict(width=0),
-        ),
-        text=[f"  {p:.1f}%" for p in pct_sorted],
+        marker=dict(color=colors, cornerradius=6, opacity=0.85),
+        text=[f"{v:.1f}%" for v in values],
         textposition="outside",
-        textfont=dict(
-            color=[BAR_COLORS[c] if c == cls else "#4A6A8A" for c in cls_sorted],
-            size=13,
-            family="Space Mono",
-        ),
-        hovertemplate="<b>%{y}</b><br>Probability: %{x:.2f}%<extra></extra>",
+        textfont=dict(color=TEXT_SECONDARY, size=13),
     ))
-    fig_prob.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
+    fig.update_layout(
         plot_bgcolor="rgba(0,0,0,0)",
-        height=220,
-        margin=dict(l=10, r=80, t=10, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=TEXT_SECONDARY, size=13),
         xaxis=dict(
-            range=[0, 115],
-            tickfont=dict(color="#4A6A8A", size=11),
-            gridcolor="rgba(255,255,255,0.04)",
-            showline=False,
-            zeroline=False,
+            range=[0, 105],
+            gridcolor=BORDER,
             ticksuffix="%",
+            tickfont=dict(color=TEXT_MUTED),
         ),
         yaxis=dict(
-            tickfont=dict(color="#A0C0D8", size=13, family="DM Sans"),
-            gridcolor="rgba(255,255,255,0)",
-            showline=False,
-            zeroline=False,
+            tickfont=dict(color=TEXT_SECONDARY, size=14),
+            autorange="reversed",
         ),
-        showlegend=False,
-        bargap=0.35,
+        margin=dict(l=10, r=20, t=10, b=10),
+        height=250,
     )
+    return fig
 
-    # ── Donut chart ───────────────────────────────────────────────────────────
-    fig_donut = go.Figure(data=[go.Pie(
-        labels=[BAR_LABELS[c] for c in CLASS_NAMES],
-        values=[float(probs[i]) * 100 for i in range(4)],
-        hole=0.65,
-        marker=dict(
-            colors=[BAR_COLORS[c] for c in CLASS_NAMES],
-            line=dict(color="#050C15", width=3),
-        ),
-        textinfo="none",
+
+def create_donut_chart(probs):
+    labels = [TUMOR_INFO[k]["label"] for k in probs]
+    values = list(probs.values())
+    colors = [TUMOR_INFO[k]["color"] for k in probs]
+
+    fig = go.Figure(go.Pie(
+        labels=labels,
+        values=values,
+        hole=0.55,
+        marker=dict(colors=colors, line=dict(color=BG_CARD, width=3)),
+        textinfo="percent",
+        textfont=dict(color=TEXT_PRIMARY, size=13),
         hovertemplate="<b>%{label}</b><br>%{value:.2f}%<extra></extra>",
-        direction="clockwise",
-        sort=False,
-    )])
-    fig_donut.add_annotation(
-        text=f"<b>{conf:.1f}%</b>",
-        x=0.5, y=0.55,
-        font=dict(size=22, color=info["color"], family="Space Mono"),
-        showarrow=False,
-    )
-    fig_donut.add_annotation(
-        text="confidence",
-        x=0.5, y=0.38,
-        font=dict(size=11, color="#4A6A8A", family="DM Sans"),
-        showarrow=False,
-    )
-    fig_donut.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
+    ))
+    fig.update_layout(
         plot_bgcolor="rgba(0,0,0,0)",
-        height=240,
-        margin=dict(l=10, r=10, t=10, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=TEXT_SECONDARY),
         showlegend=True,
         legend=dict(
-            font=dict(color="#7A9AB8", size=11, family="DM Sans"),
+            font=dict(color=TEXT_SECONDARY, size=12),
             bgcolor="rgba(0,0,0,0)",
-            x=0.5, xanchor="center",
-            y=-0.08,
             orientation="h",
+            yanchor="bottom",
+            y=-0.15,
+            xanchor="center",
+            x=0.5,
         ),
+        margin=dict(l=10, r=10, t=10, b=40),
+        height=280,
     )
+    return fig
 
-    # ── Charts row ────────────────────────────────────────────────────────────
-    chart_l, chart_r = st.columns([1.6, 1], gap="large")
 
-    with chart_l:
+def create_gauge(value, color, label):
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=value,
+        number=dict(suffix="%", font=dict(color=color, size=36)),
+        title=dict(text=label, font=dict(color=TEXT_SECONDARY, size=14)),
+        gauge=dict(
+            axis=dict(range=[0, 100], tickfont=dict(color=TEXT_MUTED, size=11), dtick=25),
+            bar=dict(color=color, thickness=0.7),
+            bgcolor=BG_SECONDARY,
+            bordercolor=BORDER,
+            borderwidth=1,
+            steps=[
+                dict(range=[0, 40], color=f"{BORDER}"),
+                dict(range=[40, 70], color=f"{BG_SECONDARY}"),
+                dict(range=[70, 100], color=f"{BORDER}"),
+            ],
+            threshold=dict(line=dict(color=color, width=3), thickness=0.8, value=value),
+        ),
+    ))
+    fig.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=TEXT_SECONDARY),
+        margin=dict(l=30, r=30, t=30, b=10),
+        height=220,
+    )
+    return fig
+
+
+def create_radar_chart(probs):
+    labels = [TUMOR_INFO[k]["label"] for k in probs]
+    values = list(probs.values())
+    colors_list = [TUMOR_INFO[k]["color"] for k in probs]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(
+        r=values + [values[0]],
+        theta=labels + [labels[0]],
+        fill="toself",
+        fillcolor=f"{ACCENT}18",
+        line=dict(color=ACCENT, width=2),
+        marker=dict(color=colors_list + [colors_list[0]], size=8),
+        name="Probability",
+    ))
+    fig.update_layout(
+        polar=dict(
+            bgcolor="rgba(0,0,0,0)",
+            radialaxis=dict(
+                visible=True,
+                range=[0, 100],
+                gridcolor=BORDER,
+                tickfont=dict(color=TEXT_MUTED, size=10),
+                ticksuffix="%",
+            ),
+            angularaxis=dict(
+                gridcolor=BORDER,
+                tickfont=dict(color=TEXT_SECONDARY, size=12),
+            ),
+        ),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=TEXT_SECONDARY),
+        showlegend=False,
+        margin=dict(l=40, r=40, t=30, b=30),
+        height=280,
+    )
+    return fig
+
+
+# =============================================================================
+# Sidebar
+# =============================================================================
+def render_sidebar():
+    with st.sidebar:
         st.markdown(f"""
-        <div style="background: #0A1628; border: 1px solid #112240;
-                    border-radius: 18px; padding: 1.5rem 1.5rem 0.5rem;">
-            <p style="font-size: 0.7rem; font-weight: 700; letter-spacing: 0.15em;
-                      color: #3A5A7A !important; text-transform: uppercase;
-                      font-family: 'Space Mono', monospace; margin: 0 0 0.2rem 0;">
-                ◈ All Class Probabilities
-            </p>
-        """, unsafe_allow_html=True)
-        st.plotly_chart(fig_prob, use_container_width=True, config={"displayModeBar": False})
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with chart_r:
-        st.markdown("""
-        <div style="background: #0A1628; border: 1px solid #112240;
-                    border-radius: 18px; padding: 1.5rem 1.5rem 0.5rem;">
-            <p style="font-size: 0.7rem; font-weight: 700; letter-spacing: 0.15em;
-                      color: #3A5A7A !important; text-transform: uppercase;
-                      font-family: 'Space Mono', monospace; margin: 0 0 0.2rem 0;">
-                ◈ Distribution
-            </p>
-        """, unsafe_allow_html=True)
-        st.plotly_chart(fig_donut, use_container_width=True, config={"displayModeBar": False})
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── Symptoms + Treatment ──────────────────────────────────────────────────
-    sym_col, treat_col = st.columns(2, gap="large")
-
-    def detail_card(title, items, color, bullet):
-        rows = "".join(f"""
-        <div style="
-            display: flex; align-items: center; gap: 0.8rem;
-            padding: 0.65rem 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            color: #A0C0D8 !important;
-            font-size: 0.88rem;
-        ">
-            <span style="color: {color} !important; font-weight: 700; flex-shrink:0;">{bullet}</span>
-            {item}
+        <div style="text-align: center; margin-bottom: 16px;">
+            <div style="font-size: 32px; margin-bottom: 8px;">🧠</div>
+            <h2 style="margin: 0; font-size: 18px; color: {TEXT_PRIMARY} !important;">MRI Classifier</h2>
+            <p style="font-size: 12px; color: {TEXT_MUTED}; margin-top: 4px;">v2.0 &bull; EfficientNet-B0</p>
         </div>
-        """ for item in items)
-        return f"""
-        <div style="
-            background: #0A1628;
-            border: 1px solid #112240;
-            border-top: 3px solid {color};
-            border-radius: 18px;
-            padding: 1.5rem 1.6rem;
-            height: 100%;
-        ">
-            <p style="font-size: 0.7rem; font-weight: 700; letter-spacing: 0.15em;
-                      color: #3A5A7A !important; text-transform: uppercase;
-                      font-family: 'Space Mono', monospace; margin: 0 0 0.8rem 0;">
-                ◈ {title}
+        <hr style="border-color: {BORDER}; margin: 16px 0;">
+        """, unsafe_allow_html=True)
+
+        st.markdown(f"#### Model Specifications")
+        specs = {
+            "Architecture": "EfficientNet-B0",
+            "Input Size": "224 x 224 px",
+            "Parameters": "~5.3M",
+            "Training Acc.": "98.2%",
+            "Framework": "PyTorch",
+        }
+        for k, v in specs.items():
+            st.markdown(f"""
+            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid {BORDER};">
+                <span style="color: {TEXT_MUTED}; font-size: 13px;">{k}</span>
+                <span style="color: {TEXT_PRIMARY}; font-size: 13px; font-weight: 600;">{v}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(f"#### Detectable Classes")
+        for cls in CLASS_NAMES:
+            info = TUMOR_INFO[cls]
+            st.markdown(f"""
+            <div style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin-bottom: 6px;
+                        background-color: {BG_SECONDARY}; border-radius: 10px; border: 1px solid {BORDER};">
+                <div style="width: 10px; height: 10px; border-radius: 50%; background-color: {info['color']};"></div>
+                <span style="color: {TEXT_SECONDARY}; font-size: 13px; font-weight: 500;">{info['label']}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown(f"""
+        <br>
+        <div style="background-color: {BG_SECONDARY}; border: 1px solid {BORDER}; border-radius: 12px; padding: 16px;">
+            <p style="color: {TEXT_MUTED}; font-size: 11px; text-align: center; margin: 0;">
+                For research and educational purposes only. Not a substitute for professional medical diagnosis.
             </p>
-            {rows}
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# Hero Section
+# =============================================================================
+def render_hero():
+    st.markdown(f"""
+    <div style="text-align: center; padding: 20px 0 10px;">
+        <div style="display: inline-flex; align-items: center; gap: 8px;
+                    border: 1px solid {ACCENT}33; background-color: {ACCENT}0D;
+                    border-radius: 999px; padding: 6px 16px; margin-bottom: 16px;">
+            <span style="font-size: 14px;">🧠</span>
+            <span style="color: {ACCENT}; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;">
+                AI-Powered Diagnostics
+            </span>
+        </div>
+        <h1 style="font-size: 42px; font-weight: 800; margin: 0; color: {TEXT_PRIMARY} !important;">
+            Brain Tumor MRI <span style="color: {ACCENT};">Classifier</span>
+        </h1>
+        <p style="color: {TEXT_MUTED}; font-size: 16px; max-width: 560px; margin: 12px auto 0; line-height: 1.6;">
+            Upload an MRI scan and receive instant AI-powered classification
+            across 4 tumor types with detailed probability analysis.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# Feature cards
+# =============================================================================
+def render_features():
+    features = [
+        ("⚡", "Real-time Analysis", "Instant classification results powered by deep learning"),
+        ("🧠", "EfficientNet Model", "State-of-the-art CNN architecture for accurate predictions"),
+        ("📊", "Detailed Reports", "Comprehensive probability breakdown and clinical insights"),
+        ("🔒", "Private & Secure", "All processing happens locally \u2014 your data never leaves"),
+    ]
+    cols = st.columns(4)
+    for i, (icon, title, desc) in enumerate(features):
+        with cols[i]:
+            st.markdown(f"""
+            <div class="feature-card">
+                <div style="background-color: {ACCENT}18; width: 40px; height: 40px; border-radius: 10px;
+                            display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; font-size: 18px;">
+                    {icon}
+                </div>
+                <h4 style="font-size: 13px; font-weight: 700; color: {TEXT_PRIMARY} !important; margin: 0 0 6px;">{title}</h4>
+                <p style="font-size: 11px; color: {TEXT_MUTED}; margin: 0; line-height: 1.5;">{desc}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# How it works
+# =============================================================================
+def render_how_it_works():
+    st.markdown(f"""
+    <div style="text-align: center; margin: 40px 0 20px;">
+        <h2 style="font-size: 22px; font-weight: 700; color: {TEXT_PRIMARY} !important; margin: 0;">How It Works</h2>
+        <p style="color: {TEXT_MUTED}; font-size: 14px; margin-top: 6px;">Simple four-step process from upload to diagnosis</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    steps = [
+        ("01", "📤", "Upload Scan", "Drop or select an MRI brain scan image in JPG or PNG format"),
+        ("02", "🔬", "AI Processing", "EfficientNet analyzes the scan through multiple neural layers"),
+        ("03", "📋", "Classification", "The model classifies the scan into one of 4 tumor categories"),
+        ("04", "📈", "Results", "View detailed probabilities, charts, and clinical information"),
+    ]
+    cols = st.columns(4)
+    for i, (num, icon, title, desc) in enumerate(steps):
+        with cols[i]:
+            st.markdown(f"""
+            <div class="feature-card" style="text-align: left;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                    <div style="background-color: {ACCENT}18; width: 36px; height: 36px; border-radius: 10px;
+                                display: flex; align-items: center; justify-content: center; font-size: 16px;">
+                        {icon}
+                    </div>
+                    <span class="step-num">{num}</span>
+                </div>
+                <h4 style="font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY} !important; margin: 0 0 6px;">{title}</h4>
+                <p style="font-size: 12px; color: {TEXT_MUTED}; margin: 0; line-height: 1.5;">{desc}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # Class badges
+    st.markdown(f"""
+    <div style="text-align: center; margin-top: 24px;">
+        <p style="font-size: 11px; color: {TEXT_MUTED}; text-transform: uppercase; letter-spacing: 2px; font-weight: 600; margin-bottom: 12px;">Detectable Tumor Classes</p>
+        <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+    """, unsafe_allow_html=True)
+    badges_html = ""
+    for cls in CLASS_NAMES:
+        info = TUMOR_INFO[cls]
+        badges_html += f"""
+        <div style="display: inline-flex; align-items: center; gap: 8px; border: 1px solid {info['color']}33;
+                    border-radius: 999px; padding: 6px 14px;">
+            <div style="width: 8px; height: 8px; border-radius: 50%; background-color: {info['color']};"></div>
+            <span style="font-size: 12px; font-weight: 600; color: {info['color']};">{info['label']}</span>
         </div>
         """
-
-    with sym_col:
-        st.markdown(
-            detail_card("Common Symptoms", info["symptoms"], info["color"], "▸"),
-            unsafe_allow_html=True
-        )
-
-    with treat_col:
-        st.markdown(
-            detail_card("Treatment Options", info["treatment"], "#1CFFD4", "✓"),
-            unsafe_allow_html=True
-        )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── Disclaimer ────────────────────────────────────────────────────────────
-    st.markdown("""
-    <div style="
-        background: #0A1628;
-        border: 1px solid #112240;
-        border-radius: 14px;
-        padding: 1rem 1.5rem;
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-    ">
-        <span style="font-size: 1.4rem;">⚕️</span>
-        <p style="margin: 0; font-size: 0.82rem; color: #4A6A8A !important; line-height: 1.5;">
-            <strong style="color: #6A8FAF !important;">Medical Disclaimer:</strong>
-            This tool is for educational and research purposes only and is
-            <strong style="color: #6A8FAF !important;">not</strong> a substitute for professional
-            medical advice, diagnosis, or treatment. Always consult a qualified healthcare provider
-            before making any medical decisions.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ─────────────────────────────────────────────────────────────────────────────
-# EMPTY STATE
-# ─────────────────────────────────────────────────────────────────────────────
-else:
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("""
-    <div style="text-align: center; padding: 3rem 2rem;">
-        <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔬</div>
-        <p style="font-size: 1.1rem; font-weight: 600; color: #4A6A8A !important;">
-            Upload a brain MRI scan above to begin classification
-        </p>
-        <p style="font-size: 0.88rem; color: #2A4A6A !important;">
-            Supported formats: JPG · PNG · JPEG
-        </p>
-        <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; margin-top: 2.5rem;">
-            <span style="background:#FF4D6D11; border:1px solid #FF4D6D44; color:#FF4D6D !important;
-                         padding:0.5rem 1.3rem; border-radius:99px; font-size:0.85rem; font-weight:600;">
-                ⬤ Glioma &nbsp; 92%
-            </span>
-            <span style="background:#FFB34711; border:1px solid #FFB34744; color:#FFB347 !important;
-                         padding:0.5rem 1.3rem; border-radius:99px; font-size:0.85rem; font-weight:600;">
-                ⬤ Meningioma &nbsp; 84%
-            </span>
-            <span style="background:#00E5A011; border:1px solid #00E5A044; color:#00E5A0 !important;
-                         padding:0.5rem 1.3rem; border-radius:99px; font-size:0.85rem; font-weight:600;">
-                ⬤ No Tumor &nbsp; 95%
-            </span>
-            <span style="background:#5BA8FF11; border:1px solid #5BA8FF44; color:#5BA8FF !important;
-                         padding:0.5rem 1.3rem; border-radius:99px; font-size:0.85rem; font-weight:600;">
-                ⬤ Pituitary &nbsp; 99%
-            </span>
+    st.markdown(f"""
+        <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+            {badges_html}
         </div>
+    """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# Results
+# =============================================================================
+def render_results(result, image_bytes):
+    cls = result["class_name"]
+    info = TUMOR_INFO[cls]
+    probs = result["probabilities"]
+
+    st.markdown(f"""
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+        <h2 style="font-size: 22px; font-weight: 700; color: {TEXT_PRIMARY} !important; margin: 0;">Analysis Results</h2>
     </div>
     """, unsafe_allow_html=True)
 
-st.markdown("</div>", unsafe_allow_html=True)
+    # ---------- Top row: Image / Diagnosis / Gauge ----------
+    col_img, col_diag, col_gauge = st.columns([1, 1.2, 1])
+
+    with col_img:
+        st.markdown(f"""
+        <div class="card" style="padding: 16px;">
+            <div style="background-color: rgba(0,0,0,0.4); border-radius: 12px; overflow: hidden; position: relative; text-align: center;">
+                <img src="data:image/png;base64,{base64.b64encode(image_bytes).decode()}"
+                     style="max-height: 280px; border-radius: 12px; object-fit: contain; width: 100%;" />
+                <div style="position: absolute; top: 12px; right: 12px;
+                            background-color: {info['color']}22; color: {info['color']};
+                            border: 1px solid {info['color']}44; border-radius: 999px;
+                            padding: 4px 12px; font-size: 11px; font-weight: 700;">
+                    Analyzed
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_diag:
+        severity_icon = "🔴" if info["severity_level"] == "high" else ("🟡" if info["severity_level"] == "moderate" else "🟢")
+        bars_html = ""
+        sorted_probs = sorted(probs.items(), key=lambda x: x[1], reverse=True)
+        for k, v in sorted_probs:
+            p_info = TUMOR_INFO[k]
+            bars_html += f"""
+            <div style="margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="font-size: 12px; color: {TEXT_MUTED};">{p_info['label']}</span>
+                    <span style="font-size: 12px; font-family: monospace; color: {p_info['color']}; font-weight: 600;">{v:.1f}%</span>
+                </div>
+                <div style="width: 100%; height: 6px; background-color: {BG_SECONDARY}; border-radius: 4px; overflow: hidden;">
+                    <div style="width: {v}%; height: 100%; background-color: {p_info['color']}; border-radius: 4px;
+                                transition: width 1s ease;"></div>
+                </div>
+            </div>
+            """
+
+        st.markdown(f"""
+        <div class="card">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
+                <span style="font-size: 18px;">🧠</span>
+                <h3 style="margin: 0; font-size: 16px; color: {TEXT_PRIMARY} !important;">Diagnosis</h3>
+            </div>
+            <h2 style="font-size: 26px; font-weight: 800; color: {info['color']}; margin: 0 0 8px;">{info['label']}</h2>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                <span>{severity_icon}</span>
+                <span class="badge" style="border: 1px solid {info['color']}66; color: {info['color']}; font-size: 11px;">
+                    {info['severity']}
+                </span>
+            </div>
+            <p style="font-size: 13px; color: {TEXT_MUTED}; line-height: 1.6; margin-bottom: 16px;">
+                {info['description']}
+            </p>
+            {bars_html}
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_gauge:
+        st.markdown(f"""
+        <div class="card">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <span style="font-size: 18px;">📈</span>
+                <h3 style="margin: 0; font-size: 16px; color: {TEXT_PRIMARY} !important;">Confidence</h3>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(create_gauge(result["confidence"], info["color"], info["label"]),
+                        use_container_width=True, config={"displayModeBar": False})
+
+        st.markdown(f"""
+        <div style="display: flex; gap: 12px; margin-top: -10px;">
+            <div class="card-inner" style="flex: 1; text-align: center;">
+                <p style="font-size: 11px; color: {TEXT_MUTED}; margin: 0;">Model</p>
+                <p style="font-size: 13px; color: {TEXT_PRIMARY}; font-weight: 700; margin: 4px 0 0;">EfficientNet</p>
+            </div>
+            <div class="card-inner" style="flex: 1; text-align: center;">
+                <p style="font-size: 11px; color: {TEXT_MUTED}; margin: 0;">Classes</p>
+                <p style="font-size: 13px; color: {TEXT_PRIMARY}; font-weight: 700; margin: 4px 0 0;">4 Types</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ---------- Charts row ----------
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_bar, col_donut = st.columns(2)
+
+    with col_bar:
+        st.markdown(f"""
+        <div class="card" style="padding: 20px 20px 8px;">
+            <h3 style="font-size: 15px; font-weight: 600; color: {TEXT_PRIMARY} !important; margin: 0 0 12px;">Class Probabilities</h3>
+        </div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(create_bar_chart(probs), use_container_width=True, config={"displayModeBar": False})
+
+    with col_donut:
+        st.markdown(f"""
+        <div class="card" style="padding: 20px 20px 8px;">
+            <h3 style="font-size: 15px; font-weight: 600; color: {TEXT_PRIMARY} !important; margin: 0 0 12px;">Distribution</h3>
+        </div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(create_donut_chart(probs), use_container_width=True, config={"displayModeBar": False})
+
+    # ---------- Radar chart ----------
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_radar, col_compare = st.columns(2)
+
+    with col_radar:
+        st.markdown(f"""
+        <div class="card" style="padding: 20px 20px 8px;">
+            <h3 style="font-size: 15px; font-weight: 600; color: {TEXT_PRIMARY} !important; margin: 0 0 12px;">Radar Analysis</h3>
+        </div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(create_radar_chart(probs), use_container_width=True, config={"displayModeBar": False})
+
+    with col_compare:
+        st.markdown(f"""
+        <div class="card" style="padding: 20px;">
+            <h3 style="font-size: 15px; font-weight: 600; color: {TEXT_PRIMARY} !important; margin: 0 0 16px;">Comparison Table</h3>
+        """, unsafe_allow_html=True)
+        for k, v in sorted_probs:
+            p_info = TUMOR_INFO[k]
+            is_top = k == cls
+            highlight = f"border-left: 3px solid {p_info['color']};" if is_top else f"border-left: 3px solid transparent;"
+            bg = f"background-color: {p_info['color']}0D;" if is_top else ""
+            st.markdown(f"""
+            <div style="display: flex; align-items: center; justify-content: space-between;
+                        padding: 12px 16px; border-radius: 10px; margin-bottom: 8px;
+                        background-color: {BG_SECONDARY}; {highlight} {bg}">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 10px; height: 10px; border-radius: 50%; background-color: {p_info['color']};"></div>
+                    <span style="font-size: 14px; color: {TEXT_SECONDARY}; font-weight: {'700' if is_top else '400'};">{p_info['label']}</span>
+                </div>
+                <span style="font-size: 14px; font-family: monospace; color: {p_info['color']}; font-weight: 700;">{v:.2f}%</span>
+            </div>
+            """, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # ---------- Clinical tabs ----------
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="card" style="padding: 20px 20px 8px;">
+        <h3 style="font-size: 16px; font-weight: 600; color: {TEXT_PRIMARY} !important; margin: 0 0 4px;">Clinical Information</h3>
+    </div>
+    """, unsafe_allow_html=True)
+
+    tab_symptoms, tab_treatment, tab_stats = st.tabs(["🩺 Symptoms", "💊 Treatment", "📊 Statistics"])
+
+    with tab_symptoms:
+        cols = st.columns(2)
+        for i, symptom in enumerate(info["symptoms"]):
+            with cols[i % 2]:
+                st.markdown(f"""
+                <div class="symptom-item">
+                    <div class="dot" style="background-color: {info['color']};"></div>
+                    <span style="font-size: 14px; color: {TEXT_SECONDARY};">{symptom}</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+    with tab_treatment:
+        cols = st.columns(2)
+        for i, treat in enumerate(info["treatment"]):
+            with cols[i % 2]:
+                st.markdown(f"""
+                <div class="symptom-item">
+                    <div style="width: 22px; height: 22px; border-radius: 50%; background-color: {ACCENT}22;
+                                display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+                                color: {ACCENT}; font-size: 11px; font-weight: 700;">{i+1}</div>
+                    <span style="font-size: 14px; color: {TEXT_SECONDARY};">{treat}</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+    with tab_stats:
+        col_prev, col_surv = st.columns(2)
+        with col_prev:
+            st.markdown(f"""
+            <div class="card-inner">
+                <p style="font-size: 11px; color: {TEXT_MUTED}; text-transform: uppercase; letter-spacing: 1.5px; margin: 0;">Prevalence</p>
+                <p style="font-size: 20px; font-weight: 700; color: {TEXT_PRIMARY}; margin: 8px 0 0;">{info['prevalence']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        with col_surv:
+            st.markdown(f"""
+            <div class="card-inner">
+                <p style="font-size: 11px; color: {TEXT_MUTED}; text-transform: uppercase; letter-spacing: 1.5px; margin: 0;">Survival Rate</p>
+                <p style="font-size: 20px; font-weight: 700; color: {TEXT_PRIMARY}; margin: 8px 0 0;">{info['survival_rate']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # ---------- Disclaimer ----------
+    st.markdown(f"""
+    <div style="background-color: {BG_SECONDARY}50; border: 1px solid {BORDER}; border-radius: 12px;
+                padding: 14px 20px; margin-top: 24px; text-align: center;">
+        <p style="font-size: 12px; color: {TEXT_MUTED}; margin: 0; line-height: 1.6;">
+            This tool is for educational and research purposes only. It is not a substitute for
+            professional medical diagnosis. Always consult a qualified healthcare provider for medical advice.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# Main
+# =============================================================================
+def main():
+    inject_styles()
+    render_sidebar()
+    render_hero()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    render_features()
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ---------- Upload ----------
+    uploaded_file = st.file_uploader(
+        "Upload MRI Scan",
+        type=["jpg", "jpeg", "png"],
+        help="Drop or select an MRI brain scan image",
+        label_visibility="collapsed",
+    )
+
+    if uploaded_file is not None:
+        image_bytes = uploaded_file.getvalue()
+
+        # Run prediction (simulate)
+        if "prediction" not in st.session_state or st.session_state.get("last_file") != uploaded_file.name:
+            with st.spinner(""):
+                # Custom spinner
+                st.markdown(f"""
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 20px;">
+                    <div style="display: flex; align-items: center; gap: 12px; background-color: {BG_CARD};
+                                border: 1px solid {BORDER}; border-radius: 12px; padding: 16px 24px;">
+                        <div style="width: 20px; height: 20px; border: 2px solid {ACCENT}; border-top-color: transparent;
+                                    border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+                        <div>
+                            <p style="color: {TEXT_PRIMARY}; font-size: 14px; font-weight: 600; margin: 0;">Analyzing MRI Scan...</p>
+                            <p style="color: {TEXT_MUTED}; font-size: 12px; margin: 2px 0 0;">Running EfficientNet classification model</p>
+                        </div>
+                    </div>
+                    <style>@keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}</style>
+                </div>
+                """, unsafe_allow_html=True)
+                time.sleep(1.5)
+
+            st.session_state["prediction"] = simulate_prediction()
+            st.session_state["last_file"] = uploaded_file.name
+            st.rerun()
+
+        render_results(st.session_state["prediction"], image_bytes)
+
+    else:
+        st.session_state.pop("prediction", None)
+        st.session_state.pop("last_file", None)
+        render_how_it_works()
+
+    # ---------- Footer ----------
+    st.markdown(f"""
+    <div style="border-top: 1px solid {BORDER}; margin-top: 40px; padding-top: 20px; text-align: center;">
+        <p style="font-size: 12px; color: {TEXT_MUTED};">
+            Brain Tumor MRI Classifier &bull; Powered by EfficientNet &bull; For research and educational purposes only
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+if __name__ == "__main__":
+    main()
