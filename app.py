@@ -677,7 +677,7 @@ def render_results(result, image_bytes):
     # ---------- Charts row ----------
    
     # ---------- Radar chart ----------
-st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
     col_radar, col_donut = st.columns(2)
 
     with col_radar:
