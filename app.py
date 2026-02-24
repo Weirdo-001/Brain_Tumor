@@ -156,6 +156,31 @@ AI-powered diagnosis using EfficientNet • 4 Tumor Classes • Real-time Result
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
+
+st.markdown("""
+<div style="
+    text-align:center;
+    padding:4rem 2rem;
+">
+    <div style="font-size:3rem;">🔬</div>
+    <div style="
+        margin-top:1rem;
+        font-size:1.2rem;
+        font-weight:600;
+        color:#F1F5F9;
+    ">
+        Upload an MRI image to begin analysis
+    </div>
+    <div style="
+        margin-top:0.5rem;
+        font-size:0.95rem;
+        color:#94A3B8;
+    ">
+        Our AI model will classify the scan instantly
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
 # ─────────────────────────────────────────
 # UPLOADER
 # ─────────────────────────────────────────
