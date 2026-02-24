@@ -311,39 +311,7 @@ def real_prediction(image_bytes):
 # =============================================================================
 # Chart helpers
 # =============================================================================
-def create_bar_chart(probs):
-    sorted_items = sorted(probs.items(), key=lambda x: x[1], reverse=True)
-    labels = [TUMOR_INFO[k]["label"] for k, _ in sorted_items]
-    values = [v for _, v in sorted_items]
-    colors = [TUMOR_INFO[k]["color"] for k, _ in sorted_items]
 
-    fig = go.Figure(go.Bar(
-        x=values,
-        y=labels,
-        orientation="h",
-        marker=dict(color=colors, opacity=0.85),
-        text=[f"{v:.1f}%" for v in values],
-        textposition="outside",
-        textfont=dict(color=TEXT_SECONDARY, size=13),
-    ))
-    fig.update_layout(
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=TEXT_SECONDARY, size=13),
-        xaxis=dict(
-            range=[0, 105],
-            gridcolor=BORDER,
-            ticksuffix="%",
-            tickfont=dict(color=TEXT_MUTED),
-        ),
-        yaxis=dict(
-            tickfont=dict(color=TEXT_SECONDARY, size=14),
-            autorange="reversed",
-        ),
-        margin=dict(l=10, r=20, t=10, b=10),
-        height=250,
-    )
-    return fig
 
 
 def create_donut_chart(probs):
@@ -380,34 +348,7 @@ def create_donut_chart(probs):
     return fig
 
 
-def create_gauge(value, color, label):
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=value,
-        number=dict(suffix="%", font=dict(color=color, size=36)),
-        title=dict(text=label, font=dict(color=TEXT_SECONDARY, size=14)),
-        gauge=dict(
-            axis=dict(range=[0, 100], tickfont=dict(color=TEXT_MUTED, size=11), dtick=25),
-            bar=dict(color=color, thickness=0.7),
-            bgcolor=BG_SECONDARY,
-            bordercolor=BORDER,
-            borderwidth=1,
-            steps=[
-                dict(range=[0, 40], color=f"{BORDER}"),
-                dict(range=[40, 70], color=f"{BG_SECONDARY}"),
-                dict(range=[70, 100], color=f"{BORDER}"),
-            ],
-            threshold=dict(line=dict(color=color, width=3), thickness=0.8, value=value),
-        ),
-    ))
-    fig.update_layout(
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=TEXT_SECONDARY),
-        margin=dict(l=30, r=30, t=30, b=10),
-        height=220,
-    )
-    return fig
+
 
 
 def create_radar_chart(probs):
@@ -459,7 +400,7 @@ def render_sidebar():
         <div style="text-align: center; margin-bottom: 16px;">
             <div style="font-size: 32px; margin-bottom: 8px;">🧠</div>
             <h2 style="margin: 0; font-size: 18px; color: {TEXT_PRIMARY} !important;">MRI Classifier</h2>
-            <p style="font-size: 12px; color: {TEXT_MUTED}; margin-top: 4px;">v2.0 &bull; EfficientNet-B0</p>
+            <p style="font-size: 12px; color: {TEXT_MUTED}; margin-top: 4px;">v2.0 &bull; EfficientNet-B3</p>
         </div>
         <hr style="border-color: {BORDER}; margin: 16px 0;">
         """, unsafe_allow_html=True)
