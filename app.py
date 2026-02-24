@@ -8,6 +8,7 @@ import io
 import base64
 import tensorflow as tf
 from tensorflow.keras.applications.efficientnet import preprocess_input
+import numpy as np
 
 # =============================================================================
 # Page Config
