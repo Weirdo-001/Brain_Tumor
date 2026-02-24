@@ -24,7 +24,7 @@ st.markdown("""
 html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
     background-color: #0B1120 !important;
-    color: #E2E8F0;
+    color: #F1F5F9 !important;
 }
 
 .stApp {
@@ -36,8 +36,10 @@ html, body, [class*="css"] {
     max-width: 1200px;
 }
 
+/* Hide streamlit chrome */
 #MainMenu, footer, header {visibility: hidden;}
 
+/* Hero */
 .hero {
     text-align: center;
     padding: 3rem 1rem;
@@ -52,29 +54,43 @@ html, body, [class*="css"] {
 }
 
 .hero-sub {
-    color: #94A3B8;
+    color: #CBD5E1 !important;
     font-size: 1.05rem;
 }
 
+/* Glass card */
 .glass {
-    background: rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.08);
     border-radius: 20px;
     padding: 2rem;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
     backdrop-filter: blur(12px);
+    color: #F8FAFC !important;
 }
 
+/* Make ALL paragraph text visible */
+p, li, span, div {
+    color: #E2E8F0 !important;
+}
+
+/* Headings brighter */
+h1, h2, h3, h4 {
+    color: #FFFFFF !important;
+}
+
+/* File uploader */
 [data-testid="stFileUploader"] {
-    background: rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.08);
     border: 2px dashed #00F5A0;
     border-radius: 16px;
     padding: 1.5rem;
 }
 
+/* HR */
 hr {
     border: none;
     height: 1px;
-    background: rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.15);
     margin: 2rem 0;
 }
 
