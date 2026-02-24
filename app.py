@@ -311,39 +311,7 @@ def real_prediction(image_bytes):
 # =============================================================================
 # Chart helpers
 # =============================================================================
-def create_bar_chart(probs):
-    sorted_items = sorted(probs.items(), key=lambda x: x[1], reverse=True)
-    labels = [TUMOR_INFO[k]["label"] for k, _ in sorted_items]
-    values = [v for _, v in sorted_items]
-    colors = [TUMOR_INFO[k]["color"] for k, _ in sorted_items]
 
-    fig = go.Figure(go.Bar(
-        x=values,
-        y=labels,
-        orientation="h",
-        marker=dict(color=colors, opacity=0.85),
-        text=[f"{v:.1f}%" for v in values],
-        textposition="outside",
-        textfont=dict(color=TEXT_SECONDARY, size=13),
-    ))
-    fig.update_layout(
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=TEXT_SECONDARY, size=13),
-        xaxis=dict(
-            range=[0, 105],
-            gridcolor=BORDER,
-            ticksuffix="%",
-            tickfont=dict(color=TEXT_MUTED),
-        ),
-        yaxis=dict(
-            tickfont=dict(color=TEXT_SECONDARY, size=14),
-            autorange="reversed",
-        ),
-        margin=dict(l=10, r=20, t=10, b=10),
-        height=250,
-    )
-    return fig
 
 
 def create_donut_chart(probs):
@@ -357,7 +325,9 @@ def create_donut_chart(probs):
         hole=0.55,
         marker=dict(colors=colors, line=dict(color="#0c1220", width=3)),
         textinfo="percent",
+        textposition="inside",
         textfont=dict(color=TEXT_PRIMARY, size=13),
+        insidetextorientation="horizontal",
         hovertemplate="<b>%{label}</b><br>%{value:.2f}%<extra></extra>",
     ))
     fig.update_layout(
@@ -705,28 +675,10 @@ def render_results(result, image_bytes):
         """, unsafe_allow_html=True)
 
     # ---------- Charts row ----------
-    st.markdown("<br>", unsafe_allow_html=True)
-    col_bar, col_donut = st.columns(2)
-
-    with col_bar:
-        st.markdown(f"""
-        <div class="card" style="padding: 20px 20px 8px;">
-            <h3 style="font-size: 15px; font-weight: 600; color: {TEXT_PRIMARY} !important; margin: 0 0 12px;">Class Probabilities</h3>
-        </div>
-        """, unsafe_allow_html=True)
-        st.plotly_chart(create_bar_chart(probs), use_container_width=True, config={"displayModeBar": False})
-
-    with col_donut:
-        st.markdown(f"""
-        <div class="card" style="padding: 20px 20px 8px;">
-            <h3 style="font-size: 15px; font-weight: 600; color: {TEXT_PRIMARY} !important; margin: 0 0 12px;">Distribution</h3>
-        </div>
-        """, unsafe_allow_html=True)
-        st.plotly_chart(create_donut_chart(probs), use_container_width=True, config={"displayModeBar": False})
-
+   
     # ---------- Radar chart ----------
-    st.markdown("<br>", unsafe_allow_html=True)
-    col_radar, col_compare = st.columns(2)
+st.markdown("<br>", unsafe_allow_html=True)
+    col_radar, col_donut = st.columns(2)
 
     with col_radar:
         st.markdown(f"""
@@ -736,36 +688,18 @@ def render_results(result, image_bytes):
         """, unsafe_allow_html=True)
         st.plotly_chart(create_radar_chart(probs), use_container_width=True, config={"displayModeBar": False})
 
-    with col_compare:
+    with col_donut:
         st.markdown(f"""
-        <div class="card" style="padding: 20px;">
-            <h3 style="font-size: 15px; font-weight: 600; color: {TEXT_PRIMARY} !important; margin: 0 0 16px;">Comparison Table</h3>
+        <div class="card" style="padding: 20px 20px 8px;">
+            <h3 style="font-size: 15px; font-weight: 600; color: {TEXT_PRIMARY} !important; margin: 0 0 12px;">Distribution</h3>
         </div>
         """, unsafe_allow_html=True)
-
-        sorted_probs_cmp = sorted(probs.items(), key=lambda x: x[1], reverse=True)
-        for k, v in sorted_probs_cmp:
-            p_info = TUMOR_INFO[k]
-            is_top = k == cls
-            border_style = f"border-left: 3px solid {p_info['color']};" if is_top else "border-left: 3px solid transparent;"
-            bg_extra = f"background-color: rgba(0,0,0,0.15);" if is_top else ""
-            weight = "700" if is_top else "400"
-            st.markdown(f"""
-            <div style="display: flex; align-items: center; justify-content: space-between;
-                        padding: 12px 16px; border-radius: 10px; margin-bottom: 8px;
-                        background-color: {BG_SECONDARY}; {border_style} {bg_extra}">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="width: 10px; height: 10px; border-radius: 50%; background-color: {p_info['color']};"></div>
-                    <span style="font-size: 14px; color: {TEXT_SECONDARY}; font-weight: {weight};">{p_info['label']}</span>
-                </div>
-                <span style="font-size: 14px; font-family: monospace; color: {p_info['color']}; font-weight: 700;">{v:.2f}%</span>
-            </div>
-            """, unsafe_allow_html=True)
+        st.plotly_chart(create_donut_chart(probs), use_container_width=True, config={"displayModeBar": False})
 
     # ---------- Clinical tabs ----------
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(f"""
-    <div class="card" style="padding: 20px 20px 8px;">
+    <div class="card" style="padding: 24px 28px 12px;">
         <h3 style="font-size: 16px; font-weight: 600; color: {TEXT_PRIMARY} !important; margin: 0 0 4px;">Clinical Information</h3>
     </div>
     """, unsafe_allow_html=True)
